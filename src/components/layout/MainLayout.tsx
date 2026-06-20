@@ -27,6 +27,8 @@ import {
   IconSidebarStore,
   IconSidebarSystem,
   IconChevronDown,
+  IconSidebarUsage,
+  IconSidebarAccessControl,
 } from '@/components/ui/icons';
 import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
 import {
@@ -59,6 +61,7 @@ const sidebarIcons: Record<string, ReactNode> = {
   pluginStore: <IconSidebarStore size={18} />,
   config: <IconSidebarConfig size={18} />,
   logs: <IconSidebarLogs size={18} />,
+  accessControl: <IconSidebarAccessControl size={18} />,
   system: <IconSidebarSystem size={18} />,
 };
 
@@ -622,6 +625,7 @@ export function MainLayout() {
           },
         ]
       : []),
+    { path: '/access-control', label: t('nav.access_control'), icon: sidebarIcons.accessControl },
   ];
   const navItems = navGroups.flatMap((group) => flattenNavItems(group.items));
   const navOrder = navItems.map((item) => item.path);

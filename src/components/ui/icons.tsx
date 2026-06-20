@@ -556,6 +556,19 @@ export function IconSidebarLogs({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconSidebarAccessControl({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...sidebarSvgProps} width={size} height={size} {...props}>
+      <path
+        d="M12 3l8 4v5c0 5.25-3.4 8.25-8 10-4.6-1.75-8-4.75-8-10V7Z"
+        fill="currentColor"
+        fillOpacity="0.08"
+      />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
 export function IconSidebarSystem({ size = 20, ...props }: IconProps) {
   return (
     <svg {...sidebarSvgProps} width={size} height={size} {...props}>
