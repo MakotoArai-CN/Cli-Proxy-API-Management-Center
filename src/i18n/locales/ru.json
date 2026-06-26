@@ -121,7 +121,7 @@
     "config_management": "Панель конфигурации",
     "logs": "Просмотр логов",
     "system_info": "Информация системы",
-    "access_control": "Access Control"
+    "access_control": "Контроль доступа"
   },
   "nav_groups": {
     "operate": "Работа",
@@ -140,7 +140,7 @@
     "logs": "Трассировка запросов",
     "config_management": "Базовая конфигурация шлюза",
     "system_info": "Состояние и диагностика",
-    "access_control": "IP bans, model policies, client whitelist"
+    "access_control": "IP-блокировки, политики моделей, белый список"
   },
   "dashboard": {
     "title": "Панель управления",

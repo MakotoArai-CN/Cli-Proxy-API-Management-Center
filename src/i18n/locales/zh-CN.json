@@ -121,7 +121,7 @@
     "config_management": "配置面板",
     "logs": "日志查看",
     "system_info": "中心信息",
-    "access_control": "Access Control"
+    "access_control": "访问控制"
   },
   "nav_groups": {
     "operate": "运行",
@@ -141,7 +141,7 @@
     "logs": "请求追踪与排查",
     "config_management": "网关基础配置",
     "system_info": "运行与诊断信息",
-    "access_control": "IP bans, model policies, client whitelist"
+    "access_control": "IP 封禁、模型策略、客户端白名单"
   },
   "dashboard": {
     "title": "仪表盘",
