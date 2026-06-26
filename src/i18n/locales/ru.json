@@ -121,7 +121,8 @@
     "plugin_store": "Магазин плагинов",
     "config_management": "Панель конфигурации",
     "logs": "Просмотр логов",
-    "system_info": "Информация системы"
+    "system_info": "Информация системы",
+    "access_control": "Access Control"
   },
   "nav_groups": {
     "operate": "Работа",
@@ -140,7 +141,8 @@
     "plugin_store": "Поиск и установка плагинов",
     "logs": "Трассировка запросов",
     "config_management": "Базовая конфигурация шлюза",
-    "system_info": "Состояние и диагностика"
+    "system_info": "Состояние и диагностика",
+    "access_control": "IP bans, model policies, client whitelist"
   },
   "dashboard": {
     "title": "Панель управления",
@@ -1655,5 +1657,27 @@
     "modelCatalog": {
       "notLoaded": "Не загружено"
     }
+  },
+  "access_control": {
+    "max_rpm": "Max RPM",
+    "max_rpm_hint": "0 = no rate limit. Requests per minute per IP.",
+    "client_whitelist_title": "Client Whitelist",
+    "client_whitelist_desc": "Control which AI coding clients can access the API.",
+    "client_whitelist_enable": "Enable Whitelist",
+    "client_whitelist_disable": "Disable Whitelist",
+    "client_whitelist_active_notice": "Whitelist is active. Only listed and allowed clients can connect.",
+    "add_client": "Add Client",
+    "edit_client": "Edit Client",
+    "delete_client_confirm": "Remove client from the whitelist?",
+    "no_clients": "No client entries. Add entries to restrict access.",
+    "client_id": "Client ID",
+    "client_id_placeholder": "e.g. cursor, claude-code",
+    "client_label": "Label",
+    "client_label_placeholder": "Display name",
+    "client_enabled": "Access",
+    "client_allowed": "Allowed",
+    "client_denied": "Denied",
+    "note": "Note",
+    "note_placeholder": "Optional note"
   }
 }

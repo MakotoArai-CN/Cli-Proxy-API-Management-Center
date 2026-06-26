@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { EmptyState } from '@/components/ui/EmptyState';
-import type { ModelPolicy, IPRecord, AutoPolicy, IPStats } from '@/types';
+import type { ModelPolicy, IPRecord, AutoPolicy, IPStats, ClientEntry, ClientWhitelistState, ClientPreset } from '@/types';
 import styles from './AccessControlPage.module.scss';
 
 const MODEL_ACTION_OPTIONS = [
@@ -55,6 +55,8 @@ export function AccessControlPage() {
   const [ipRecords, setIPRecords] = useState<IPRecord[]>([]);
   const [autoPolicies, setAutoPolicies] = useState<AutoPolicy[]>([]);
   const [ipStats, setIPStats] = useState<IPStats[]>([]);
+  const [clientWhitelist, setClientWhitelist] = useState<ClientWhitelistState>({ active: false, entries: [] });
+  const [clientPresets, setClientPresets] = useState<ClientPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -66,6 +68,16 @@ export function AccessControlPage() {
     route_to: '',
     channel_to: '',
     reason: '',
+    max_rpm: 0,
+  });
+
+  const [clientModalOpen, setClientModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<ClientEntry | null>(null);
+  const [clientForm, setClientForm] = useState({
+    client_id: '',
+    label: '',
+    note: '',
+    enabled: true,
   });
 
   const [ipModalOpen, setIPModalOpen] = useState(false);
@@ -104,11 +116,13 @@ export function AccessControlPage() {
     setLoading(true);
     setError('');
     try {
-      const [modelsRes, ipsRes, autoRes, statsRes] = await Promise.allSettled([
+      const [modelsRes, ipsRes, autoRes, statsRes, clientRes, presetsRes] = await Promise.allSettled([
         accessControlApi.getModelPolicies(),
         accessControlApi.getIPRecords(),
         accessControlApi.getAutoPolicies(),
         accessControlApi.getStats(),
+        accessControlApi.getClientWhitelist(),
+        accessControlApi.getClientPresets(),
       ]);
       if (modelsRes.status === 'fulfilled') setModelPolicies(modelsRes.value?.model_policies || []);
       if (ipsRes.status === 'fulfilled') setIPRecords(ipsRes.value?.ip_records || []);
@@ -123,6 +137,10 @@ export function AccessControlPage() {
           }))
         );
       }
+      if (clientRes.status === 'fulfilled' && clientRes.value) {
+        setClientWhitelist({ active: clientRes.value.active ?? false, entries: clientRes.value.entries || [] });
+      }
+      if (presetsRes.status === 'fulfilled') setClientPresets(presetsRes.value?.presets || []);
 
       const firstRejected = [modelsRes, ipsRes, autoRes, statsRes].find(
         (r) => r.status === 'rejected'
@@ -165,7 +183,7 @@ export function AccessControlPage() {
 
   const openAddModelPolicy = () => {
     setEditingModel(null);
-    setModelForm({ model: '', action: 'deny', route_to: '', channel_to: '', reason: '' });
+    setModelForm({ model: '', action: 'deny', route_to: '', channel_to: '', reason: '', max_rpm: 0 });
     setModelModalOpen(true);
   };
 
@@ -177,6 +195,7 @@ export function AccessControlPage() {
       route_to: policy.route_to,
       channel_to: policy.channel_to,
       reason: policy.reason,
+      max_rpm: policy.max_rpm || 0,
     });
     setModelModalOpen(true);
   };
@@ -190,6 +209,7 @@ export function AccessControlPage() {
         route_to: modelForm.route_to.trim(),
         channel_to: modelForm.channel_to.trim(),
         reason: modelForm.reason.trim(),
+        max_rpm: modelForm.max_rpm || 0,
       });
       setModelModalOpen(false);
       await loadData();
@@ -197,6 +217,58 @@ export function AccessControlPage() {
       // error handled by loadData
     }
   };
+
+  const openAddClientEntry = () => {
+    setEditingClient(null);
+    setClientForm({ client_id: '', label: '', note: '', enabled: true });
+    setClientModalOpen(true);
+  };
+
+  const openEditClientEntry = (entry: ClientEntry) => {
+    setEditingClient(entry);
+    setClientForm({ client_id: entry.client_id, label: entry.label, note: entry.note, enabled: entry.enabled });
+    setClientModalOpen(true);
+  };
+
+  const handleSaveClientEntry = async () => {
+    if (!clientForm.client_id.trim()) return;
+    try {
+      await accessControlApi.upsertClientEntry({
+        client_id: clientForm.client_id.trim(),
+        label: clientForm.label.trim() || clientForm.client_id.trim(),
+        note: clientForm.note.trim(),
+        enabled: clientForm.enabled,
+      });
+      setClientModalOpen(false);
+      await loadData();
+    } catch {
+      // silent
+    }
+  };
+
+  const handleDeleteClientEntry = async (clientId: string) => {
+    if (!confirm(t('access_control.delete_client_confirm', { client: clientId }))) return;
+    try {
+      await accessControlApi.deleteClientEntry(clientId);
+      await loadData();
+    } catch {
+      // silent
+    }
+  };
+
+  const handleToggleClientWhitelist = async () => {
+    try {
+      await accessControlApi.setClientWhitelistActive(!clientWhitelist.active);
+      await loadData();
+    } catch {
+      // silent
+    }
+  };
+
+  const presetsNotInList = useMemo(() => {
+    const existingIds = new Set(clientWhitelist.entries.map((e) => e.client_id));
+    return clientPresets.filter((p) => !existingIds.has(p.ID));
+  }, [clientPresets, clientWhitelist.entries]);
 
   const handleDeleteModelPolicy = async (model: string) => {
     if (!confirm(t('access_control.delete_model_policy_confirm', { model }))) return;
@@ -228,11 +300,14 @@ export function AccessControlPage() {
   const handleSaveIPRecord = async () => {
     if (!ipForm.ip.trim()) return;
     try {
+      const action = ipForm.status === 'banned' ? 'ban'
+        : ipForm.status === 'risk_controlled' ? 'risk_control'
+        : 'unban';
       await accessControlApi.putIPRecord({
         ip: ipForm.ip.trim(),
-        status: ipForm.status,
+        action,
         reason: ipForm.reason.trim(),
-        duration: ipForm.duration || undefined,
+        duration_seconds: ipForm.duration || undefined,
       });
       setIPModalOpen(false);
       await loadData();
@@ -500,6 +575,78 @@ export function AccessControlPage() {
         )}
       </Card>
 
+      {/* Client Whitelist */}
+      <Card
+        title={
+          <div className={styles.sectionHeader}>
+            <div>
+              <h2 className={styles.sectionTitle}>{t('access_control.client_whitelist_title')}</h2>
+              <p className={styles.sectionDesc}>{t('access_control.client_whitelist_desc')}</p>
+            </div>
+            <div className={styles.actions}>
+              <Button
+                size="sm"
+                variant={clientWhitelist.active ? 'danger' : 'ghost'}
+                onClick={handleToggleClientWhitelist}
+                disabled={disabled}
+              >
+                {clientWhitelist.active ? t('access_control.client_whitelist_disable') : t('access_control.client_whitelist_enable')}
+              </Button>
+              <Button size="sm" onClick={openAddClientEntry} disabled={disabled}>
+                {t('access_control.add_client')}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        {clientWhitelist.active && (
+          <div className={styles.activeNotice}>{t('access_control.client_whitelist_active_notice')}</div>
+        )}
+        {loading ? (
+          <p>{t('common.loading')}</p>
+        ) : clientWhitelist.entries.length === 0 ? (
+          <EmptyState title={t('access_control.no_clients')} />
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>{t('access_control.client_id')}</th>
+                  <th>{t('access_control.client_label')}</th>
+                  <th>{t('access_control.status')}</th>
+                  <th>{t('access_control.reason')}</th>
+                  <th>{t('common.action')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientWhitelist.entries.map((entry) => (
+                  <tr key={entry.client_id}>
+                    <td className={styles.mono}>{entry.client_id}</td>
+                    <td>{entry.label}</td>
+                    <td>
+                      <span className={`${styles.badge} ${entry.enabled ? styles.badgeAllow : styles.badgeDeny}`}>
+                        {entry.enabled ? t('access_control.client_allowed') : t('access_control.client_denied')}
+                      </span>
+                    </td>
+                    <td className={styles.truncate}>{entry.note || '-'}</td>
+                    <td>
+                      <div className={styles.actions}>
+                        <Button size="sm" variant="ghost" onClick={() => openEditClientEntry(entry)} disabled={disabled}>
+                          {t('common.edit')}
+                        </Button>
+                        <Button size="sm" variant="danger" onClick={() => handleDeleteClientEntry(entry.client_id)} disabled={disabled}>
+                          {t('common.delete')}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       {/* IP Statistics */}
       <Card
         title={
@@ -596,6 +743,16 @@ export function AccessControlPage() {
             options={REASON_PRESETS}
             placeholder={t('access_control.reason_placeholder')}
           />
+        </div>
+        <div className={styles.formGroup}>
+          <label>{t('access_control.max_rpm')}</label>
+          <input
+            type="number"
+            value={modelForm.max_rpm}
+            onChange={(e) => setModelForm((f) => ({ ...f, max_rpm: parseInt(e.target.value) || 0 }))}
+            min={0}
+          />
+          <span className={styles.hint}>{t('access_control.max_rpm_hint')}</span>
         </div>
       </Modal>
 
@@ -709,6 +866,62 @@ export function AccessControlPage() {
             />
             <span className={styles.hint}>{t('access_control.duration_hint')}</span>
           </div>
+        </div>
+      </Modal>
+      {/* Client Entry Modal */}
+      <Modal
+        open={clientModalOpen}
+        title={editingClient ? t('access_control.edit_client') : t('access_control.add_client')}
+        onClose={() => setClientModalOpen(false)}
+        footer={
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={() => setClientModalOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleSaveClientEntry} disabled={!clientForm.client_id.trim()}>{t('common.save')}</Button>
+          </div>
+        }
+      >
+        <div className={styles.formGroup}>
+          <label>{t('access_control.client_id')}</label>
+          {editingClient ? (
+            <input value={clientForm.client_id} disabled />
+          ) : (
+            <AutocompleteInput
+              value={clientForm.client_id}
+              onChange={(v) => {
+                const preset = clientPresets.find((p) => p.ID === v);
+                setClientForm((f) => ({ ...f, client_id: v, label: preset ? preset.Label : f.label }));
+              }}
+              options={presetsNotInList.map((p) => ({ value: p.ID, label: `${p.ID} (${p.Label})` }))}
+              placeholder={t('access_control.client_id_placeholder')}
+            />
+          )}
+        </div>
+        <div className={styles.formGroup}>
+          <label>{t('access_control.client_label')}</label>
+          <input
+            value={clientForm.label}
+            onChange={(e) => setClientForm((f) => ({ ...f, label: e.target.value }))}
+            placeholder={t('access_control.client_label_placeholder')}
+          />
+        </div>
+        <div className={styles.formGroup}>
+          <label>{t('access_control.client_enabled')}</label>
+          <Select
+            value={clientForm.enabled ? 'true' : 'false'}
+            options={[
+              { value: 'true', label: t('access_control.client_allowed') },
+              { value: 'false', label: t('access_control.client_denied') },
+            ]}
+            onChange={(v) => setClientForm((f) => ({ ...f, enabled: v === 'true' }))}
+          />
+        </div>
+        <div className={styles.formGroup}>
+          <label>{t('access_control.note')}</label>
+          <input
+            value={clientForm.note}
+            onChange={(e) => setClientForm((f) => ({ ...f, note: e.target.value }))}
+            placeholder={t('access_control.note_placeholder')}
+          />
         </div>
       </Modal>
     </div>

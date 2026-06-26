@@ -1,5 +1,13 @@
 import { apiClient } from './client';
-import type { ModelPolicy, IPRecord, AutoPolicy, AccessControlStats } from '@/types';
+import type {
+  ModelPolicy,
+  IPRecord,
+  AutoPolicy,
+  AccessControlStats,
+  ClientEntry,
+  ClientPreset,
+  ClientWhitelistState,
+} from '@/types';
 
 export const accessControlApi = {
   getModelPolicies: () =>
@@ -14,7 +22,7 @@ export const accessControlApi = {
   getIPRecords: () =>
     apiClient.get<{ ip_records: IPRecord[] }>('/access-control/ips'),
 
-  putIPRecord: (record: { ip: string; status: string; reason?: string; duration?: number }) =>
+  putIPRecord: (record: { ip: string; action: string; reason?: string; duration_seconds?: number }) =>
     apiClient.put('/access-control/ips', record),
 
   deleteIPRecord: (ip: string) =>
@@ -28,4 +36,20 @@ export const accessControlApi = {
 
   getStats: () =>
     apiClient.get<AccessControlStats>('/access-control/stats'),
+
+  // Client whitelist
+  getClientWhitelist: () =>
+    apiClient.get<ClientWhitelistState>('/access-control/clients'),
+
+  setClientWhitelistActive: (active: boolean) =>
+    apiClient.put('/access-control/clients', { active }),
+
+  upsertClientEntry: (entry: Partial<ClientEntry> & { client_id: string }) =>
+    apiClient.post('/access-control/clients', entry),
+
+  deleteClientEntry: (clientId: string) =>
+    apiClient.delete(`/access-control/clients?client_id=${encodeURIComponent(clientId)}`),
+
+  getClientPresets: () =>
+    apiClient.get<{ presets: ClientPreset[] }>('/access-control/client-presets'),
 };

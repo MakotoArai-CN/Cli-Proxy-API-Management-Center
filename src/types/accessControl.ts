@@ -4,6 +4,7 @@ export interface ModelPolicy {
   route_to: string;
   channel_to: string;
   reason: string;
+  max_rpm: number;
   created_at: string;
 }
 
@@ -38,4 +39,22 @@ export interface IPStats {
 
 export interface AccessControlStats {
   stats: IPStatsMap;
+}
+
+export interface ClientEntry {
+  client_id: string;
+  label: string;
+  note: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface ClientPreset {
+  ID: string;
+  Label: string;
+}
+
+export interface ClientWhitelistState {
+  active: boolean;
+  entries: ClientEntry[];
 }

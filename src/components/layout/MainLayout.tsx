@@ -27,7 +27,6 @@ import {
   IconSidebarStore,
   IconSidebarSystem,
   IconChevronDown,
-  IconSidebarUsage,
   IconSidebarAccessControl,
 } from '@/components/ui/icons';
 import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
@@ -609,6 +608,12 @@ export function MainLayout() {
             ]
           : []),
         {
+          path: '/access-control',
+          labelKey: 'nav.access_control',
+          metaKey: 'nav_meta.access_control',
+          icon: sidebarIcons.accessControl,
+        },
+        {
           path: '/system',
           labelKey: 'nav.system_info',
           metaKey: 'nav_meta.system_info',
@@ -625,7 +630,6 @@ export function MainLayout() {
           },
         ]
       : []),
-    { path: '/access-control', label: t('nav.access_control'), icon: sidebarIcons.accessControl },
   ];
   const navItems = navGroups.flatMap((group) => flattenNavItems(group.items));
   const navOrder = navItems.map((item) => item.path);
