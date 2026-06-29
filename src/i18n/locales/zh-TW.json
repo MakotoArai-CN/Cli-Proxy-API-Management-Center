@@ -121,7 +121,8 @@
     "config_management": "設定面板",
     "logs": "記錄檢視",
     "system_info": "中心資訊",
-    "access_control": "存取控制"
+    "access_control": "存取控制",
+    "usage_stats": "用量統計"
   },
   "nav_groups": {
     "operate": "運行",
@@ -141,7 +142,8 @@
     "logs": "請求追蹤與排查",
     "config_management": "閘道基礎設定",
     "system_info": "運行與診斷資訊",
-    "access_control": "IP 封鎖、模型策略、用戶端白名單"
+    "access_control": "IP 封鎖、模型策略、用戶端白名單",
+    "usage_stats": "API 金鑰用量與費用統計"
   },
   "dashboard": {
     "title": "儀表板",

@@ -121,7 +121,8 @@
     "config_management": "Config Panel",
     "logs": "Logs Viewer",
     "system_info": "Management Center Info",
-    "access_control": "Access Control"
+    "access_control": "Access Control",
+    "usage_stats": "Usage Statistics"
   },
   "nav_groups": {
     "operate": "Operate",
@@ -141,7 +142,8 @@
     "logs": "Request tracing",
     "config_management": "Gateway configuration",
     "system_info": "Runtime & diagnostics",
-    "access_control": "IP bans, model policies, client whitelist"
+    "access_control": "IP bans, model policies, client whitelist",
+    "usage_stats": "API key usage & cost tracking"
   },
   "dashboard": {
     "title": "Dashboard",
