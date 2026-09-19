@@ -8,6 +8,7 @@ import { useProviderRecentRequests } from '@/components/providers/hooks/useProvi
 import {
   getOpenAIProviderRecentWindowStats,
   getProviderRecentWindowStats,
+  getProviderUsageKey,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
@@ -83,7 +84,7 @@ const getResourceRecentSuccess = (
   }
   return getProviderRecentWindowStats(
     usageByProvider,
-    resource.brand,
+    getProviderUsageKey(resource.brand),
     resource.apiKey ?? undefined,
     resource.baseUrl ?? undefined
   ).success;
@@ -118,7 +119,11 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
 
   useHeaderRefresh(handleRefresh, isCurrentLayer);
 
-  const disableMutations = connectionStatus !== 'connected' || workbench.mutating;
+  const disableMutations =
+    connectionStatus !== 'connected' ||
+    workbench.mutating ||
+    workbench.isFetching ||
+    workbench.isError;
 
   const persistUiState = useCallback(
     (updater: (prev: ProvidersWorkbenchUiState) => ProvidersWorkbenchUiState) => {
@@ -142,7 +147,10 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
 
   const allGroups = useMemo(() => workbench.snapshot?.groups ?? [], [workbench.snapshot]);
   const groups = useMemo(
-    () => (fixedBrand ? allGroups.filter((group) => group.id === fixedBrand) : allGroups),
+    () =>
+      fixedBrand
+        ? allGroups.filter((group) => group.id === fixedBrand)
+        : allGroups,
     [allGroups, fixedBrand]
   );
   const firstVisibleBrand = groups[0]?.id ?? fixedBrand ?? 'gemini';
@@ -204,19 +212,14 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
     }
 
     const sorted = [...arr].sort((a, b) => {
-      let diff = 0;
-      if (providerSortBy === 'name') {
-        diff = getResourceSortName(a).localeCompare(getResourceSortName(b));
-      } else if (providerSortBy === 'priority') {
-        diff = a.priority - b.priority;
-      } else {
-        diff =
-          getResourceRecentSuccess(a, usageByProvider) -
-          getResourceRecentSuccess(b, usageByProvider);
-      }
-      if (diff === 0) {
-        diff = a.originalIndex - b.originalIndex;
-      }
+      const sortDiff =
+        providerSortBy === 'name'
+          ? getResourceSortName(a).localeCompare(getResourceSortName(b))
+          : providerSortBy === 'priority'
+            ? a.priority - b.priority
+            : getResourceRecentSuccess(a, usageByProvider) -
+              getResourceRecentSuccess(b, usageByProvider);
+      const diff = sortDiff || a.originalIndex - b.originalIndex;
       return providerSortDir === 'asc' ? diff : -diff;
     });
 
@@ -247,27 +250,25 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
   ]);
 
   const totalResources = useMemo(
-    () =>
-      groups.reduce((sum, g) => sum + g.resources.filter((r) => !r.flags.isPlaceholder).length, 0),
+    () => groups.reduce((sum, g) => sum + g.resources.length, 0),
     [groups]
   );
 
   const totalActive = useMemo(
-    () =>
-      groups.reduce(
-        (sum, g) => sum + g.resources.filter((r) => !r.disabled && !r.flags.isPlaceholder).length,
-        0
-      ),
+    () => groups.reduce((sum, g) => sum + g.resources.filter((r) => !r.disabled).length, 0),
     [groups]
   );
 
   const providerFamilies = useMemo(
-    () => groups.filter((g) => g.resources.some((r) => !r.flags.isPlaceholder)).length,
+    () => groups.filter((g) => g.resources.length > 0).length,
     [groups]
   );
   const updatedAtLabel = workbench.snapshot
     ? formatDateTime(workbench.snapshot.fetchedAt, i18n.language)
     : t('providersPage.modelCatalog.notLoaded');
+  const errorBanner = workbench.errorMessage ? (
+    <div className="error-box">{workbench.errorMessage}</div>
+  ) : null;
 
   const openCreate = useCallback(() => {
     const brand = activeBrand;
@@ -371,6 +372,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
           isNewDisabled
           showNewAction={!fixedBrand}
         />
+        {errorBanner}
       </div>
     );
   }
@@ -389,6 +391,8 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         onRefresh={() => void handleRefresh()}
         onNew={openCreate}
       />
+
+      {errorBanner}
 
       <div className={`${styles.layout} ${fixedBrand ? styles.layoutSingle : ''}`.trim()}>
         {!fixedBrand ? (

@@ -26,6 +26,14 @@ export const TYPE_COLORS: Record<string, TypeColorSet> = {
     light: { bg: '#eae7ff', text: '#3538d4' },
     dark: { bg: '#262395', text: '#b5b0ff' },
   },
+  devin: {
+    light: { bg: '#e8f4ff', text: '#155e9b' },
+    dark: { bg: '#123b5d', text: '#8dc9f5' },
+  },
+  meta: {
+    light: { bg: '#e3f2fd', text: '#1565c0' },
+    dark: { bg: '#0d47a1', text: '#64b5f6' },
+  },
   kimi: {
     light: { bg: '#dce8ff', text: '#0560cf' },
     dark: { bg: '#003880', text: '#70b5ff' },
@@ -118,7 +126,7 @@ export const CLAUDE_USAGE_WINDOW_KEYS = [
   { key: 'seven_day_opus', id: 'seven-day-opus', labelKey: 'claude_quota.seven_day_opus' },
   { key: 'seven_day_sonnet', id: 'seven-day-sonnet', labelKey: 'claude_quota.seven_day_sonnet' },
   { key: 'seven_day_cowork', id: 'seven-day-cowork', labelKey: 'claude_quota.seven_day_cowork' },
-  { key: 'iguana_necktie', id: 'iguana-necktie', labelKey: 'claude_quota.iguana_necktie' },
+  { key: 'iguana_necktie', id: 'seven-day-fable', labelKey: 'claude_quota.seven_day_fable' },
 ] as const;
 
 // Codex API configuration
@@ -131,7 +139,7 @@ export const CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL =
 export const CODEX_REQUEST_HEADERS = {
   Authorization: 'Bearer $TOKEN$',
   'Content-Type': 'application/json',
-  'User-Agent': 'codex_cli_rs/0.76.0 (Debian 13.0.0; x86_64) WindowsTerminal',
+  'User-Agent': 'codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)',
 };
 
 // Kimi API configuration
@@ -144,6 +152,9 @@ export const KIMI_REQUEST_HEADERS = {
 // xAI/Grok API configuration
 export const XAI_BILLING_WEEKLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits';
 export const XAI_BILLING_MONTHLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing';
+export const XAI_API_ME_URL = 'https://api.x.ai/v1/me';
+export const XAI_API_CHAT_URL = 'https://api.x.ai/v1/chat/completions';
+export const XAI_PAID_HEALTH_MODEL = 'grok-4.5';
 export const XAI_GROK_CLIENT_VERSION = '0.2.91';
 export const XAI_GROK_USER_AGENT = 'grok-pager/0.2.91 grok-shell/0.2.91 (macos; aarch64)';
 
@@ -153,4 +164,9 @@ export const XAI_REQUEST_HEADERS = {
   'x-grok-client-version': XAI_GROK_CLIENT_VERSION,
   accept: '*/*',
   'user-agent': XAI_GROK_USER_AGENT,
+};
+
+export const XAI_API_REQUEST_HEADERS = {
+  Authorization: 'Bearer $TOKEN$',
+  accept: 'application/json',
 };

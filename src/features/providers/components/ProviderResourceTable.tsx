@@ -22,6 +22,7 @@ import {
   getOpenAIProviderTotalStats,
   getProviderRecentStatusData,
   getProviderTotalStats,
+  getProviderUsageKey,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
@@ -52,7 +53,7 @@ const resolveStatusBarData = (
   }
   return getProviderRecentStatusData(
     usageByProvider,
-    resource.brand,
+    getProviderUsageKey(resource.brand),
     resource.apiKey ?? undefined,
     resource.baseUrl ?? undefined
   );
@@ -67,7 +68,7 @@ const resolveTotalStats = (
   }
   return getProviderTotalStats(
     usageByProvider,
-    resource.brand,
+    getProviderUsageKey(resource.brand),
     resource.apiKey ?? undefined,
     resource.baseUrl ?? undefined
   );
@@ -111,11 +112,14 @@ export function ProviderResourceTable({
         renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
         renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
       );
-      if (r.brand === 'codex' && r.flags.websockets) {
+      if ((r.brand === 'codex' || r.brand === 'xai') && r.flags.websockets) {
         items.push(renderFlagTag('ws', t('providersPage.table.websocketsTag')));
       }
       if (r.brand === 'claude' && r.flags.cloakEnabled) {
         items.push(renderFlagTag('cloak', t('providersPage.table.cloakTag')));
+      }
+      if (r.brand === 'claude' && r.flags.claudeCodeCliProfile) {
+        items.push(renderFlagTag('cli-profile', t('providersPage.table.cliProfileTag')));
       }
     }
     return <div className={styles.metricsCell}>{items}</div>;
