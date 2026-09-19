@@ -3,32 +3,24 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
-import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { IconInfo, IconX } from '@/components/ui/icons';
+import { IconEyeOff, IconNetwork } from '@/components/ui/icons';
+import { OAuthEditorProviderCard } from '@/features/authFiles/components/OAuthEditorProviderCard';
+import {
+  ExcludedModelsPicker,
+  normalizeExcludedRules,
+  type ExcludedModelsCatalogState,
+} from '@/components/excludedModels';
 import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { useAuthStore, useNotificationStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
-import {
-  buildOAuthProviderOptions,
-  getTypeLabel,
-  normalizeProviderKey,
-} from '@/features/authFiles/constants';
+import { buildOAuthProviderOptions, normalizeProviderKey } from '@/features/authFiles/constants';
 import { getStringSetSignature, isOAuthEditorDirty } from '@/features/authFiles/oauthEditorState';
-import {
-  getCustomOAuthExcludedRules,
-  getEffectiveOAuthExcludedRules,
-  hasOAuthExcludedRule,
-  normalizeOAuthExcludedRules,
-  updateOAuthExcludedRule,
-} from '@/features/authFiles/oauthExcludedRules';
 import type { AuthFileItem, OAuthModelAliasEntry } from '@/types';
 import { getErrorMessage } from '@/utils/helpers';
-import styles from './AuthFilesOAuthExcludedEditPage.module.scss';
+import styles from '@/features/authFiles/components/OAuthEditor.module.scss';
 
 type AuthFileModelItem = { id: string; display_name?: string; type?: string; owned_by?: string };
 
@@ -60,7 +52,6 @@ export function AuthFilesOAuthExcludedEditPage() {
   const [modelsList, setModelsList] = useState<AuthFileModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<'unsupported' | null>(null);
-  const [customRule, setCustomRule] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -89,26 +80,25 @@ export function AuthFilesOAuthExcludedEditPage() {
     return Object.prototype.hasOwnProperty.call(excluded, resolvedProviderKey);
   }, [excluded, resolvedProviderKey]);
   const baselineModelsSignature = useMemo(
-    () => getStringSetSignature(normalizeOAuthExcludedRules(excluded[resolvedProviderKey] ?? [])),
+    () => getStringSetSignature(normalizeExcludedRules(excluded[resolvedProviderKey] ?? [])),
     [excluded, resolvedProviderKey]
   );
-  const effectiveRules = useMemo(
-    () => getEffectiveOAuthExcludedRules(selectedModels, customRule),
-    [customRule, selectedModels]
-  );
+  /** 规则集就是选中集本身——「待添加的自定义规则」随 Add 按钮一起消失了。 */
+  const effectiveRules = useMemo(() => normalizeExcludedRules(selectedModels), [selectedModels]);
   const effectiveRulesSignature = useMemo(
     () => getStringSetSignature(effectiveRules),
     [effectiveRules]
   );
   const contentDirty = baselineModelsSignature !== effectiveRulesSignature;
-  const customRules = useMemo(
-    () =>
-      getCustomOAuthExcludedRules(
-        selectedModels,
-        modelsList.map((model) => model.id)
-      ),
-    [modelsList, selectedModels]
+  const candidates = useMemo(
+    () => modelsList.map((model) => ({ id: model.id, displayName: model.display_name })),
+    [modelsList]
   );
+  const catalogState: ExcludedModelsCatalogState = modelsLoading
+    ? 'loading'
+    : modelsError === 'unsupported'
+      ? 'unavailable'
+      : 'ready';
   const isDirty = isOAuthEditorDirty(
     initialProviderKey,
     provider,
@@ -222,8 +212,7 @@ export function AuthFilesOAuthExcludedEditPage() {
       return;
     }
     const existing = excluded[resolvedProviderKey] ?? [];
-    setSelectedModels(new Set(normalizeOAuthExcludedRules(existing)));
-    setCustomRule('');
+    setSelectedModels(new Set(normalizeExcludedRules(existing)));
   }, [excluded, resolvedProviderKey]);
 
   useEffect(() => {
@@ -305,15 +294,9 @@ export function AuthFilesOAuthExcludedEditPage() {
     [applyProviderChange, contentDirty, resolvedProviderKey, showConfirmation, unsavedChangesDialog]
   );
 
-  const toggleModel = useCallback((modelId: string, checked: boolean) => {
-    setSelectedModels((prev) => new Set(updateOAuthExcludedRule(prev, modelId, checked)));
+  const handleRulesChange = useCallback((next: string[]) => {
+    setSelectedModels(new Set(next));
   }, []);
-
-  const handleAddCustomRule = useCallback(() => {
-    if (!customRule.trim()) return;
-    setSelectedModels(new Set(effectiveRules));
-    setCustomRule('');
-  }, [customRule, effectiveRules]);
 
   const handleSave = useCallback(async () => {
     const normalizedProvider = normalizeProviderKey(provider);
@@ -356,6 +339,7 @@ export function AuthFilesOAuthExcludedEditPage() {
       backLabel={t('common.back')}
       backAriaLabel={t('common.back')}
       contentClassName={styles.pageContent}
+      topBarClassName={styles.topBar}
       rightAction={
         <Button size="sm" onClick={handleSave} loading={saving} disabled={!canSave}>
           {t('oauth_excluded.save')}
@@ -385,173 +369,60 @@ export function AuthFilesOAuthExcludedEditPage() {
         </Card>
       ) : (
         <>
-          <Card className={styles.settingsCard}>
-            <div className={styles.settingsHeader}>
-              <div className={styles.settingsHeaderTitle}>
-                <IconInfo size={16} />
-                <span>{t('oauth_excluded.title')}</span>
-              </div>
-              <div className={styles.settingsHeaderHint}>{t('oauth_excluded.description')}</div>
+          <div className={styles.intro}>
+            <span className={styles.introIcon}>
+              <IconEyeOff size={22} aria-hidden="true" />
+            </span>
+            <div>
+              <h1 className={styles.introTitle}>{t('oauth_excluded.title')}</h1>
+              <p className={styles.description}>{t('oauth_excluded.editor_description')}</p>
             </div>
+          </div>
 
-            <div className={styles.settingsSection}>
-              <div className={styles.settingsRow}>
-                <div className={styles.settingsInfo}>
-                  <div className={styles.settingsLabel}>{t('oauth_excluded.provider_label')}</div>
-                  <div className={styles.settingsDesc}>{t('oauth_excluded.provider_hint')}</div>
-                </div>
-                <div className={styles.settingsControl}>
-                  <AutocompleteInput
-                    id="oauth-excluded-provider"
-                    placeholder={t('oauth_excluded.provider_placeholder')}
-                    value={provider}
-                    onChange={updateProvider}
-                    options={providerOptions}
-                    disabled={disableControls || saving}
-                    wrapperStyle={{ marginBottom: 0 }}
-                  />
-                </div>
-              </div>
-
-              {providerOptions.length > 0 && (
-                <div className={styles.tagList}>
-                  {providerOptions.map((option) => {
-                    const isActive =
-                      normalizeProviderKey(provider) === normalizeProviderKey(option);
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
-                        onClick={() => updateProvider(option)}
-                        disabled={disableControls || saving}
-                      >
-                        {getTypeLabel(t, option)}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </Card>
+          <OAuthEditorProviderCard
+            provider={provider}
+            options={providerOptions}
+            onChange={updateProvider}
+            disabled={disableControls || saving}
+            translationPrefix="oauth_excluded"
+          />
 
           <Card className={styles.settingsCard}>
-            <div className={styles.settingsHeader}>
-              <div className={styles.settingsHeaderTitle}>{t('oauth_excluded.models_label')}</div>
+            <div className={styles.editorHeader}>
+              <div className={styles.sectionHeading}>
+                <span className={styles.stepNumber} aria-hidden="true">
+                  02
+                </span>
+                <div className={styles.headingCopy}>
+                  <h2 className={styles.sectionTitle} id="oauth-excluded-models-label">
+                    {t('oauth_excluded.models_label')}
+                  </h2>
+                  <p className={styles.description}>{t('oauth_excluded.models_hint')}</p>
+                </div>
+              </div>
               {resolvedProviderKey && (
-                <div className={styles.modelsHint}>
-                  {modelsLoading ? (
-                    <>
-                      <LoadingSpinner size={14} />
-                      <span>{t('oauth_excluded.models_loading')}</span>
-                    </>
-                  ) : modelsError === 'unsupported' ? (
-                    <span>{t('oauth_excluded.models_unsupported')}</span>
-                  ) : modelsList.length > 0 ? (
-                    <span>{t('oauth_excluded.models_loaded', { count: modelsList.length })}</span>
-                  ) : (
-                    <span>{t('oauth_excluded.no_models_available')}</span>
-                  )}
-                </div>
+                <span className={styles.countBadge}>
+                  {t('excluded_models.trigger_summary_rules', { n: effectiveRules.length })}
+                </span>
               )}
             </div>
-
-            <div className={styles.customRuleSection}>
-              <div className={styles.customRuleHeader}>
-                <label className={styles.settingsLabel} htmlFor="oauth-excluded-custom-rule">
-                  {t('oauth_excluded.custom_rule_label')}
-                </label>
-                <div className={styles.settingsDesc}>{t('oauth_excluded.custom_rule_hint')}</div>
-              </div>
-              <div className={styles.customRuleRow}>
-                <input
-                  id="oauth-excluded-custom-rule"
-                  className={`input ${styles.customRuleInput}`}
-                  value={customRule}
-                  onChange={(event) => setCustomRule(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleAddCustomRule();
-                    }
-                  }}
-                  placeholder={t('oauth_excluded.custom_rule_placeholder')}
-                  disabled={!resolvedProviderKey || disableControls || saving}
+            <div className={styles.editorBody}>
+              {resolvedProviderKey ? (
+                <ExcludedModelsPicker
+                  value={effectiveRules}
+                  onChange={handleRulesChange}
+                  candidates={candidates}
+                  catalogState={catalogState}
+                  disabled={disableControls || saving}
+                  labelledBy="oauth-excluded-models-label"
                 />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleAddCustomRule}
-                  disabled={!resolvedProviderKey || !customRule.trim() || disableControls || saving}
-                >
-                  {t('oauth_excluded.custom_rule_add')}
-                </Button>
-              </div>
-
-              {customRules.length > 0 && (
-                <div className={styles.customRuleList}>
-                  <div className={styles.customRuleListLabel}>
-                    {t('oauth_excluded.custom_rules_label')}
-                  </div>
-                  <div className={styles.customRuleChips}>
-                    {customRules.map((rule) => (
-                      <span key={rule.toLowerCase()} className={styles.customRuleChip}>
-                        <span>{rule}</span>
-                        <button
-                          type="button"
-                          className={styles.customRuleRemove}
-                          onClick={() => toggleModel(rule, false)}
-                          disabled={disableControls || saving}
-                          aria-label={t('oauth_excluded.custom_rule_remove', { rule })}
-                        >
-                          <IconX size={13} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
+              ) : (
+                <div className={styles.emptyModels}>
+                  <IconNetwork size={24} aria-hidden="true" />
+                  {t('oauth_excluded.provider_required')}
                 </div>
               )}
             </div>
-
-            {modelsLoading ? (
-              <div className={styles.loadingModels}>
-                <LoadingSpinner size={16} />
-                <span>{t('common.loading')}</span>
-              </div>
-            ) : modelsList.length > 0 ? (
-              <div className={styles.modelList}>
-                {modelsList.map((model) => {
-                  const checked = hasOAuthExcludedRule(selectedModels, model.id);
-                  return (
-                    <SelectionCheckbox
-                      key={model.id}
-                      checked={checked}
-                      disabled={disableControls || saving}
-                      onChange={(value) => toggleModel(model.id, value)}
-                      className={styles.modelItem}
-                      labelClassName={styles.modelText}
-                      label={
-                        <>
-                          <span className={styles.modelId}>{model.id}</span>
-                          {model.display_name && model.display_name !== model.id && (
-                            <span className={styles.modelDisplayName}>{model.display_name}</span>
-                          )}
-                        </>
-                      }
-                    />
-                  );
-                })}
-              </div>
-            ) : resolvedProviderKey ? (
-              <div className={styles.emptyModels}>
-                {modelsError === 'unsupported'
-                  ? t('oauth_excluded.models_unsupported')
-                  : t('oauth_excluded.no_models_available')}
-              </div>
-            ) : (
-              <div className={styles.emptyModels}>{t('oauth_excluded.provider_required')}</div>
-            )}
           </Card>
         </>
       )}

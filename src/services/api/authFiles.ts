@@ -6,19 +6,33 @@ import { apiClient } from './client';
 import type { AuthFilesResponse } from '@/types/authFile';
 import type { OAuthModelAliasEntry } from '@/types';
 import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
+import { getQuotaCacheKey } from '@/utils/quota/identity';
+import {
+  normalizeRecentRequestAuthIndex,
+  normalizeRecentRequestBuckets,
+  normalizeUsageTotal,
+} from '@/utils/recentRequests';
 import { parseTimestampMs } from '@/utils/timestamp';
+import { normalizeAuthFileCooldowns, normalizeCooldownTimestamp } from './authFileCooldowns';
 
 type StatusError = { status?: number };
 type AuthFileStatusResponse = { status: string; disabled: boolean };
+export type AuthFileLookup = { name: string; authIndex?: string };
 type AuthFileEntry = AuthFilesResponse['files'][number];
 export type AuthFileFieldsPatch = {
   prefix?: string;
   proxy_url?: string;
   headers?: Record<string, string>;
   priority?: number;
+  weight?: number | null;
+  disable_cooling?: boolean;
+  'disable-cooling'?: boolean;
   websockets?: boolean;
   using_api?: boolean;
   note?: string;
+  excluded_models?: string[];
+  'excluded-models'?: string[];
+  expired?: string;
 };
 type AuthFileBatchFailure = { name: string; error: string };
 type AuthFileBatchUploadResponse = {
@@ -197,6 +211,8 @@ const mergeAuthFileEntries = (entries: AuthFileEntry[]): AuthFileEntry => {
 
   rest.forEach((entry) => {
     Object.entries(entry).forEach(([key, value]) => {
+      // Cooldown snapshots are atomic: [] and null are meaningful, not missing fields.
+      if (key === 'cooldowns' && Object.prototype.hasOwnProperty.call(merged, key)) return;
       if (!hasMeaningfulValue(merged[key]) && hasMeaningfulValue(value)) {
         merged[key] = value;
       }
@@ -206,13 +222,81 @@ const mergeAuthFileEntries = (entries: AuthFileEntry[]): AuthFileEntry => {
   return merged;
 };
 
-const dedupeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse => {
+const INTEGER_STRING_PATTERN = /^[+-]?\d+$/;
+
+const readIntegerField = (value: unknown): number | undefined => {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || !INTEGER_STRING_PATTERN.test(trimmed)) return undefined;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+};
+
+const readRuntimeOnlyField = (entry: AuthFileEntry): boolean => {
+  const raw = entry['runtime_only'] ?? entry.runtimeOnly;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'string') return raw.trim().toLowerCase() === 'true';
+  return false;
+};
+
+/**
+ * 契约边界归一化：把后端 kebab/snake_case 生字段填充到 AuthFileItem 声明的
+ * camelCase 字段上。原始字段全部透传——quota resolvers 仍直接读
+ * plan_type / id_token / metadata / attributes 等生字段。
+ */
+const normalizeAuthFileEntry = (
+  entry: AuthFileEntry,
+  observedAt: string | undefined,
+  receivedAtMs: number
+): AuthFileEntry => {
+  const declaredStatusMessage =
+    typeof entry.statusMessage === 'string' ? entry.statusMessage.trim() : '';
+  const statusMessage = readTextField(entry, 'status_message') || declaredStatusMessage;
+  const note = readTextField(entry, 'note');
+  const email = readTextField(entry, 'email');
+  // account / account_type 故意不归一化：api-key 类凭证的 account 就是 API key 本身
+  // （sdk/cliproxy/auth/types.go AccountInfo），不能进入展示与搜索路径。
+  const projectId = readTextField(entry, 'project_id');
+  const modified = readDateField(entry);
+  const priority = readIntegerField(entry['priority']);
+  const weight = readIntegerField(entry['weight']);
+
+  return {
+    ...entry,
+    cooldownSnapshot: normalizeAuthFileCooldowns(entry.cooldowns, observedAt, receivedAtMs),
+    runtimeOnly: readRuntimeOnlyField(entry),
+    authIndex: normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex),
+    recentRequests: normalizeRecentRequestBuckets(entry.recent_requests ?? entry.recentRequests),
+    successCount: normalizeUsageTotal(entry.success),
+    failureCount: normalizeUsageTotal(entry.failed),
+    ...(statusMessage ? { statusMessage } : {}),
+    ...(modified > 0 ? { modified } : {}),
+    priority,
+    weight,
+    ...(note ? { note } : {}),
+    ...(email ? { email } : {}),
+    ...(projectId ? { projectId } : {}),
+  };
+};
+
+export const normalizeAuthFilesResponse = (
+  payload: AuthFilesResponse,
+  receivedAtMs = Date.now()
+): AuthFilesResponse => {
+  const observedAt = normalizeCooldownTimestamp(payload?.observed_at);
   const files = Array.isArray(payload?.files) ? payload.files : [];
   const grouped = new Map<string, AuthFileEntry[]>();
 
   files.forEach((entry) => {
     const name = readTextField(entry, 'name');
-    const key = name || JSON.stringify(entry);
+    const key = name
+      ? getQuotaCacheKey({
+          ...entry,
+          name,
+          authIndex: normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex),
+        })
+      : JSON.stringify(entry);
     const bucket = grouped.get(key);
     if (bucket) {
       bucket.push(entry);
@@ -221,15 +305,24 @@ const dedupeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse 
     grouped.set(key, [entry]);
   });
 
-  const normalizedFiles = Array.from(grouped.values()).map(mergeAuthFileEntries);
-  normalizedFiles.sort((left, right) =>
-    readTextField(left, 'name').localeCompare(readTextField(right, 'name'), undefined, {
-      sensitivity: 'accent',
-    })
+  const normalizedFiles = Array.from(grouped.values()).map((entries) =>
+    normalizeAuthFileEntry(mergeAuthFileEntries(entries), observedAt, receivedAtMs)
   );
+  normalizedFiles.sort((left, right) => {
+    const nameOrder = readTextField(left, 'name').localeCompare(
+      readTextField(right, 'name'),
+      undefined,
+      { sensitivity: 'accent' }
+    );
+    if (nameOrder !== 0) return nameOrder;
+    return String(left.authIndex ?? '').localeCompare(String(right.authIndex ?? ''), undefined, {
+      sensitivity: 'accent',
+    });
+  });
 
   return {
     ...payload,
+    observedAt,
     files: normalizedFiles,
     total: normalizedFiles.length,
   };
@@ -340,13 +433,27 @@ export const serializeOauthModelAliases = (
 const OAUTH_MODEL_ALIAS_ENDPOINT = '/oauth-model-alias';
 
 export const authFilesApi = {
-  list: async () => dedupeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
+  list: async (lookup?: AuthFileLookup) =>
+    normalizeAuthFilesResponse(
+      await apiClient.get<AuthFilesResponse>(
+        '/auth-files',
+        lookup ? { params: { name: lookup.name, auth_index: lookup.authIndex } } : undefined
+      )
+    ),
 
   setStatus: (name: string, disabled: boolean) =>
     apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
 
   patchFields: (name: string, fields: AuthFileFieldsPatch) =>
     apiClient.patch('/auth-files/fields', { name, ...fields }),
+
+  requestManualRefresh: async (name: string, authIndex?: string): Promise<void> => {
+    // v7.3.0 returns the complete Auth (including tokens). Never return it to callers.
+    await apiClient.post<unknown>('/auth-files/refresh', {
+      name,
+      ...(authIndex ? { auth_index: authIndex } : {}),
+    });
+  },
 
   uploadFiles: async (files: File[]): Promise<AuthFileBatchUploadResult> => {
     const requestedNames = files.map((file) => file.name);
@@ -378,14 +485,18 @@ export const authFilesApi = {
 
   deleteAll: () => apiClient.delete('/auth-files', { params: { all: true } }),
 
-  downloadText: async (name: string): Promise<string> => {
+  download: async (name: string): Promise<Blob> => {
     const response = await apiClient.getRaw(
       `/auth-files/download?name=${encodeURIComponent(name)}`,
       {
         responseType: 'blob',
       }
     );
-    const blob = response.data as Blob;
+    return response.data as Blob;
+  },
+
+  downloadText: async (name: string): Promise<string> => {
+    const blob = await authFilesApi.download(name);
     return blob.text();
   },
 

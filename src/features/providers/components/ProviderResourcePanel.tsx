@@ -55,14 +55,20 @@ export function ProviderResourcePanel({
   const emptyText = t('providersPage.table.empty');
   const logoClassName = [
     styles.logo,
+    logo?.themeSurface ? styles.logoThemeSurface : '',
     logo?.darkSrc ? styles.logoThemeLight : '',
     logo?.invertOnDark ? styles.logoInvertOnDark : '',
   ]
     .filter(Boolean)
     .join(' ');
-  const darkLogoClassName = [styles.logo, styles.logoThemeDark].filter(Boolean).join(' ');
+  const darkLogoClassName = [
+    styles.logo,
+    logo?.themeSurface ? styles.logoThemeSurface : '',
+    styles.logoThemeDark,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
-  const realResources = filteredResources.filter((r) => !r.flags.isPlaceholder);
   const titleContent = (
     <>
       {logo ? (
@@ -113,7 +119,7 @@ export function ProviderResourcePanel({
         ) : null}
       </div>
 
-      {realResources.length === 0 ? (
+      {filteredResources.length === 0 ? (
         <div className={styles.empty}>
           <div>{emptyText}</div>
           <div className={styles.emptyAction}>

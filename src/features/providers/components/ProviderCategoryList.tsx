@@ -12,18 +12,26 @@ interface ProviderCategoryListProps {
 export function ProviderCategoryList({ groups, activeBrand, onSelect }: ProviderCategoryListProps) {
   const { t } = useTranslation();
 
+  const providerGroups = groups;
+
   const renderGroups = (items: ProviderGroup[]) => (
     <div className={styles.list}>
       {items.map((group) => {
         const active = group.id === activeBrand;
-        const realResources = group.resources.filter((r) => !r.flags.isPlaceholder);
-        const total = realResources.length;
-        const activeCount = realResources.filter((r) => !r.disabled).length;
+        const total = group.resources.length;
+        const activeCount = group.resources.filter((r) => !r.disabled).length;
         const logo = PROVIDER_LOGOS[group.id];
-        const itemClass = `${styles.item} ${active ? styles.active : ''}`;
+        const itemClass = [
+          styles.item,
+          active ? styles.active : '',
+          '',
+        ]
+          .filter(Boolean)
+          .join(' ');
         const logoClassName = [
           styles.logo,
           logo?.transparent ? styles.logoTransparent : '',
+          logo?.themeSurface ? styles.logoThemeSurface : '',
           logo?.darkSrc ? styles.logoThemeLight : '',
           logo?.invertOnDark ? styles.logoInvertOnDark : '',
         ]
@@ -32,6 +40,7 @@ export function ProviderCategoryList({ groups, activeBrand, onSelect }: Provider
         const darkLogoClassName = [
           styles.logo,
           logo?.transparent ? styles.logoTransparent : '',
+          logo?.themeSurface ? styles.logoThemeSurface : '',
           styles.logoThemeDark,
         ]
           .filter(Boolean)
@@ -71,7 +80,14 @@ export function ProviderCategoryList({ groups, activeBrand, onSelect }: Provider
                 </span>
               </span>
             </span>
-            <span className={`${styles.badge} ${total === 0 ? styles.badgeAmber : ''}`}>
+            <span
+              className={[
+                styles.badge,
+                total === 0 ? styles.badgeAmber : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            >
               {total}
             </span>
           </button>
@@ -84,7 +100,7 @@ export function ProviderCategoryList({ groups, activeBrand, onSelect }: Provider
     <div className={styles.stack}>
       <aside className={styles.aside}>
         <p className={styles.eyebrow}>{t('providersPage.categories.title')}</p>
-        {renderGroups(groups)}
+        {renderGroups(providerGroups)}
       </aside>
     </div>
   );
